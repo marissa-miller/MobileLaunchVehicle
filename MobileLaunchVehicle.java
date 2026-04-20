@@ -753,14 +753,21 @@ public class MobileLaunchVehicle extends LinearOpMode {
                 //   in code (vs. via physical wiring).
                 // ********************************************************************
                 if (launchSequenceStep == -1) {          // if not in launch sequence
-                    basePower = gamepad1.left_stick_y;
-                    turnPower = gamepad1.left_stick_x;
+                    //basePower = gamepad1.left_stick_y;    This was used for arcade drive
+                    //turnPower = gamepad1.right_stick_x;
+                    
+                    leftPower = gamepad1.left_stick_y;
+                    rightPower = gamepad1.right_stick_y;
+
+                      
                 } else {                                // disable drive motion if in launch sequence
-                    basePower = turnPower = 0;
+                    //basePower = turnPower = 0;
+                    
+                    leftPower = rightPower = 0;
                 }
 
-                leftPower = basePower - turnPower;
-                rightPower = basePower + turnPower;
+                //leftPower = basePower + turnPower;    This was used for arcade drive
+                //rightPower = basePower - turnPower;
 
                 rearLeft.setPower(leftPower * speed.powerFactor);
                 frontLeft.setPower(leftPower * speed.powerFactor);
