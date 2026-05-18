@@ -1,8 +1,5 @@
 package org.firstinspires.ftc.teamcode;
 
-// Demo of commits.
-
-import java.lang.*;
 import com.qualcomm.robotcore.util.Range;
 
 // Basic OpMode Requirements
@@ -34,481 +31,8 @@ public class MobileLaunchVehicle extends LinearOpMode {
     private final static boolean DEBUG = false;
     private final static boolean VERBOSE = false;
     private final static boolean FULL_TIMING = false;
-    private final static double PRECISION_LIMIT_DOUBLE = 0.000000000001;
-
-    public enum CountdownState {
-        COUNTDOWN_HOLDING(0, "holding.") { // This position set in hardware.
-            @Override
-            public CountdownState previous() {
-                return this;    // there is no previous for first position.
-            };
-        },
-        COUNTDOWN_COUNTING(1, "counting."),
-        COUNTDOWN_COMPLETE(2, "complete.") {
-            @Override
-            public CountdownState next() {
-                return this;    // there is no next for last position up.
-            };
-        };
-
-        private final int state;
-        private final String description;
-
-        CountdownState(int state, String description) {
-            this.state = state;
-            this.description = description;
-        }
-
-        public CountdownState next() {
-            // No bounds checking required here, because the last instance overrides
-            return values()[ordinal() + 1];
-        }
-
-        public CountdownState previous() {
-            // No bounds checking required here, because the last instance overrides
-            return values()[ordinal() - 1];
-        }
-
-        private double state() {
-            return state;
-        }
-
-        private String description() {
-            return description;
-        }
-    }
-
-    public enum Speed {
-        SPEED_ZERO(0, 0, "Zero."),
-        SPEED_ONE(1, 0.20, "One.") {
-            @Override
-            // Disallow shifting to zero. (Can set to zero directly, but not by shifting.)
-            public Speed previous() {
-                return this;
-            }
-
-            ;
-        },
-        SPEED_TWO(2, 0.40, "Two."),
-        SPEED_THREE(3, 0.60, "Three."),
-        SPEED_FOUR(4, 0.80, "Four."),
-        SPEED_FIVE(5, 1.00, "Five.") {
-            @Override
-            public Speed next() {
-                return this;
-            }
-
-            ;
-        };
-
-        private final int speed;
-        private final double powerFactor;
-        private final String description;
-
-        Speed(int speed, double powerFactor, String description) {
-            this.speed = speed;
-            this.powerFactor = powerFactor;
-            this.description = description;
-        }
-
-        public Speed next() {
-            // No bounds checking required here, because the last instance overrides
-            return values()[ordinal() + 1];
-        }
-
-        public Speed previous() {
-            // No bounds checking required here, because the last instance overrides
-            return values()[ordinal() - 1];
-        }
-
-        private double speed() {
-            return speed;
-        }
-
-        private double powerFactor() {
-            return powerFactor;
-        }
-
-        private String description() {
-            return description;
-        }
-    }
-
-    public class Trigger {
-        private boolean currentState;
-        private boolean lastState;
-
-        Trigger(boolean currentState) {
-            // Initialize both with currentState, so no action triggered on creation.
-            this.currentState = currentState;
-            this.lastState = this.currentState;
-        }
-
-        public int getChange(boolean currentState) {
-            if (currentState != lastState) {
-                lastState = currentState;
-                if (currentState) {     // 0: Changed to false, 1: Changed to true
-                    return 1;
-                } else {
-                    return 0;
-                }
-            } else {
-                return -1;              // No change from last check
-            }
-        }
-    }
-
-    public class Countdown {
-        private CountdownState countdownState;
-        private int duration;
-        private long nanoTimeT; // Launch time
-        private long nanoTimeRemaining;
-        private long nanoTimeFlag;
-        private final long billion = 1000000000;
-
-        Countdown(int duration) {       // duration in seconds until launch
-            this.duration = duration;
-            reset();
-        }
-
-        public void reset() {
-            this.nanoTimeT      = 0;
-            this.nanoTimeRemaining   = 0;
-            this.countdownState = CountdownState.COUNTDOWN_HOLDING;
-            this.nanoTimeFlag   = 0;
-        }
-
-        public boolean startCountdown() {
-            nanoTimeRemaining = duration * billion;
-            return resumeCountdown();
-        }
-
-        public boolean resumeCountdown() {
-            if(countdownState == CountdownState.COUNTDOWN_HOLDING) {
-                nanoTimeT = System.nanoTime() + nanoTimeRemaining;
-                countdownState = CountdownState.COUNTDOWN_COUNTING;
-                return true;
-            } else {
-                return false;
-            }
-        }
-
-        public boolean holdCountdown() {
-            if(countdownState == CountdownState.COUNTDOWN_COUNTING) {
-                nanoTimeRemaining = nanoTimeT - System.nanoTime();
-                if (nanoTimeRemaining < 0) {
-                    // ToDo: This is arguably an error state. Should we do something more?
-                    nanoTimeRemaining = 0;
-                }
-                countdownState = CountdownState.COUNTDOWN_HOLDING;
-                return true;
-            } else {
-                return false;
-            }
-        }
-
-        public String getTimeTStatement() {
-            return getTimeTStatement(0);
-        }
-
-        public String getTimeTStatement(int offset) {
-            int tSeconds = getTimeT() - offset;  // offset to account for speaking/reporting delay.
-            if (tSeconds > 9) {
-                return " T minus " + Integer.toString(tSeconds) + " seconds and " + countdownState.description;
-            } else if (tSeconds < 0) {
-                return " T plus " + Integer.toString(Math.abs(tSeconds)) + " seconds and " + countdownState.description;
-            } else {
-                return Long.toString(tSeconds);
-            }
-        }
-
-        public int getTimeT() {
-            return (int)Math.round((float)getNanoTimeT() / billion);
-        }
-
-        public long getNanoTimeT() {
-            return nanoTimeT - System.nanoTime();
-        }
-
-        public void setFlag(int flagMilliseconds) {
-            nanoTimeFlag = System.nanoTime() + (flagMilliseconds * 1000000);
-        }
-
-        public boolean getFlag() {
-            if(System.nanoTime() > nanoTimeFlag && nanoTimeFlag > 0) {
-                nanoTimeFlag = 0;
-                return true;
-            } else {
-                return false;
-            }
-        }
-
-    }
-
-    public class RobotServo {
-        private Servo servo;
-        private double positionParked;      // Expected start position
-        private double positionBase;        // Base position when operating.
-        private double positionPerDegree;   // Usually measured. Requires scaleRange set prior to measurement.
-        private double positionMin;         // Usually measured. Requires scaleRange set prior to measurement.
-        private double positionMax;         // Usually measured. Requires scaleRange set prior to measurement.
-        private double positionAdjust;      // Adjust closest physical mounting to square.
-        private double positionLast;        // Estimated or actual position prior to last move.
-
-        // nanoTime values are used to prevent run-away setting of servo position when under driver control. i.e,
-        //   prevents servo setting being looped up to 1.0 because 400 opMode loops have occurred during the time the
-        //   driver pressed up on the joystick for 1/4 second.
-        private long nanoTimePerDegree;
-        private long nanoTimeIncrementAllowed;   // Insure that this is initialized at or below actual System.nanoTime().
-        private long nanoTimeDecrementAllowed;   // Insure that this is initialized at or below actual System.nanoTime().
-        private long nanoTimeLast;               // Time of initiating last move.
-
-        RobotServo(Servo servo) {
-            // To Do: Should we continue to allow this, or should we require input parameters?
-
-            // Default to park and base of 0, full range of motion, 180 degrees of motion, no adjust, and
-            //   a very conservative (slow but safe) speed expectation.
-            this(servo, 0, 0, 0, 1, 0.00555555555,
-                    0, 10000000);
-        }
-
-        RobotServo(
-                Servo servo, double positionParked, double positionBase, double positionMin, double positionMax,
-                double positionPerDegree, double positionAdjust, long nanoTimePerDegree) {
-            this.servo = servo;
-            this.positionParked = positionParked;
-            this.positionBase = positionBase;
-            this.positionMin = positionMin;
-            this.positionMax = positionMax;
-            // Ignore the built-in scaleRange functionality, as it adds no value in our case where we are
-            //  tracking by per-degree amounts, etc.
-            // this.servo.scaleRange(positionMin, positionMax);
-            this.positionPerDegree = positionPerDegree;
-            this.positionAdjust = positionAdjust;
-            this.nanoTimePerDegree = nanoTimePerDegree;
-
-            this.nanoTimeIncrementAllowed = Long.MIN_VALUE; // Earliest possible nanoTime to assure first move is allowed.
-            this.nanoTimeDecrementAllowed = Long.MIN_VALUE; // -9223372036854775808
-
-            // Ideally set initial position on intsantiation. May not work unless constructed while opMode running.
-            // Doesn't work properly. Handle manually --> this.servo.setPosition(positionParked);
-        }
-
-        public void setPositionParked(double positionParked) {
-            this.positionParked = positionParked;
-        }
-
-        public void setPositionBase(double positionBase) {
-            this.positionBase = positionBase;
-        }
-
-        public void setPositionPerDegree(double positionPerDegree) {
-            this.positionPerDegree = positionPerDegree;
-        }
-
-        public void setPositionAdjust(double positionAdjust) {
-            this.positionAdjust = positionAdjust;
-        }
-
-        public void setNanoTimePerDegree(long nanoTimePerDegree) {
-            this.nanoTimePerDegree = nanoTimePerDegree;
-        }
-
-        public void resetNanoTimeIncrementAllowed() {
-            nanoTimeIncrementAllowed = Long.MIN_VALUE;
-        }
-
-        public void resetNanoTimeDecrementAllowed() {
-            nanoTimeDecrementAllowed = Long.MIN_VALUE;
-        }
-
-        public void setDirection(Servo.Direction direction) {
-            servo.setDirection(direction);
-        }
-
-        public double getPositionParked() {
-            return positionParked;
-        }
-
-        public double getPositionBase() {
-            return positionBase;
-        }
-
-        public double getPositionPerDegree() {
-            return positionPerDegree;
-        }
-
-        public double getPositionAdjust() {
-            return positionAdjust;
-        }
-
-        public long getNanoTimePerDegree() {
-            return nanoTimePerDegree;
-        }
-
-        double getCurrentPosition() {
-            return servo.getPosition();
-        }
-
-        public void toPark() {
-            setPosition(positionParked);
-        }
-
-        public void toBase() {
-            setPosition(positionBase);
-        }
-
-        // boolean positionIncrement(double degrees) {
-        //     return positionIncrement(double degrees, System.nanoTime());
-        // }
-
-        // Calls to System.nanoTime are expensive, so allow already known time to be used if available.
-        boolean positionIncrement(double degrees, long nanoTimeCurrent) {
-            double position = servo.getPosition();
-            double newPosition;
-            // Position check is fast relative to time check. So do this first to avoid costly system time calls.
-            if (degrees >= 0) {
-                if (position + PRECISION_LIMIT_DOUBLE > positionMax) {
-                    return false;
-                }    // If already at max.
-
-                if (nanoTimeCurrent < nanoTimeIncrementAllowed) {    // If finishing last move.
-                    telemetry.addData("nanoTimeCurrent", nanoTimeCurrent / 1000000);
-                    telemetry.addData("nanoTimeIncrementAllowed", nanoTimeIncrementAllowed / 1000000);
-                    return false;
-                }
-            } else {
-                if (position - PRECISION_LIMIT_DOUBLE < positionMin) {
-                    return false;
-                }    // If already at min.
-
-                if (nanoTimeCurrent < nanoTimeDecrementAllowed) {    // If finishing last move.
-                    telemetry.addData("nanoTimeCurrent", nanoTimeCurrent / 1000000);
-                    telemetry.addData("nanoTimeDecrementAllowed", nanoTimeDecrementAllowed / 1000000);
-                    return false;
-                }
-            }
-
-            newPosition = position - (positionPerDegree * degrees);
-            setPosition(newPosition, nanoTimeCurrent);
-            return true;
-        }
-
-        public void setPosition(double position) {
-            setPosition(position, System.nanoTime());
-        }
-
-        public void setPosition(double position, long nanoTimeCurrent) {
-            // This is the final step before moving the servo. So handle all limits and adjust here.
-            position += positionAdjust;             // Add in offset for fine tuning around gear positions.
-            if (position < positionMin) {
-                position = positionMin;             // Limit to positionMin.
-            } else if (position > positionMax) {
-                position = positionMax;             // Limit to positionMax.
-            }
-
-            positionLast = positionEstimate(nanoTimeCurrent);
-            if(position > positionLast) {
-                nanoTimeIncrementAllowed = nanoTimeCurrent +
-                        (long)((position - positionLast) / positionPerDegree) * nanoTimePerDegree;
-            }
-
-            if(position < positionLast) {
-                nanoTimeDecrementAllowed = nanoTimeCurrent +
-                        (long)((positionLast - position) / positionPerDegree) * nanoTimePerDegree;
-            }
-
-
-            nanoTimeLast = nanoTimeCurrent;
-            servo.setPosition(position);
-        }
-
-        public double positionEstimate() {
-            return positionEstimate(System.nanoTime());
-        }
-
-        public double positionEstimate(long nanoTimeCurrent) {
-            double positionSet          = servo.getPosition();
-            double movementSet          = positionSet - positionLast;
-
-            // nanoTimeMoveRequired is estimated time required to move the movementSet distance.
-            // distance set in degrees * time per degree
-            // (distance as double / distance per degree) * time per degree
-            long nanoTimeMoveRequired   =
-                    (long)(Math.abs(movementSet) / positionPerDegree * nanoTimePerDegree);
-            long nanoTimeMoveActual     = nanoTimeCurrent - nanoTimeLast;
-            long nanoTimeEstMoveDone    = nanoTimeLast + nanoTimeMoveRequired;
-
-            if(nanoTimeCurrent > nanoTimeEstMoveDone) {
-                return positionSet;
-            } else {
-                // Accurate enough. Does not handle the fact that movement involves some accelleration time.
-                // timeActual / timeRequired is roughly equivalent to distanceActual / distanceRequired, so
-                //   can be used as a factor to estimate distance.
-                double movementActual = movementSet * ((double)nanoTimeMoveActual / nanoTimeMoveRequired);
-                return positionLast + movementActual;
-            }
-        }
-    }
-
-    public class RobotArm {
-        RobotServo waist;
-        RobotServo shoulder;
-
-        public RobotArm() {
-            this.waist = new RobotServo(
-                    hardwareMap.servo.get("serv4"),
-                    0.5, 0.5, 0.0, 1.0, 0.00175, 0.0, (long)5000000);
-
-            // Horizontal: 0.5038, Vertical: 0.21885, 15 degrees (untested): 0.4088.
-            this.shoulder = new RobotServo(
-                    hardwareMap.servo.get("serv5"),
-                    0.4563, 0.21885, 0.16, 0.5038, 0.003166, 0.0, (long)7500000);
-
-            // RobotServo elbow = new RobotServo(
-            //         hardwareMap.servo.get("serv3"), 0.5, 0.315, 0, 1, 0.00175, -0.0025, (long)5000000);
-
-            // RobotServo forearm = new RobotServo(
-            //         hardwareMap.servo.get("serv2"), 0.5, 0.315, 0, 1, 0.00175, -0.0025, 5000000);
-
-            // RobotServo wrist = new RobotServo(
-            //         hardwareMap.servo.get("serv <Need New Hub (more servos) for this> "), 0.5, 0.315, 0, 1, 0.00175, -0.0025, 5000000);
-
-            // RobotServo claw = new RobotServo(
-            //         hardwareMap.servo.get("serv1"), 0.5, 0.315, 0, 1, 0.00175, -0.0025, 5000000);
-        }
-
-    }
-
-    private class Voice {
-        private AndroidTextToSpeech androidTextToSpeech;
-
-        public Voice() {
-            this.androidTextToSpeech = new AndroidTextToSpeech();
-            androidTextToSpeech.initialize();
-            androidTextToSpeech.setLanguageAndCountry("en", "US");
-            sleep(500);
-            speak("System started and paused.", true);
-        }
-
-        public void speak(String text) {
-            speak(text, false);
-        }
-
-        public void speak(String text, boolean bWait) {
-            boolean bStillSpeaking = true;
-            androidTextToSpeech.speak(text);
-            sleep(50);
-            if(bWait) {
-                do {
-                    bStillSpeaking = androidTextToSpeech.isSpeaking();
-                } while (bStillSpeaking);
-            }
-        }
-    }
 
     private void reportSequenceTime(long zeroTime) {
-
     }
 
     //Time
@@ -516,7 +40,7 @@ public class MobileLaunchVehicle extends LinearOpMode {
     // private Duration  countDownClock = Duration.of(30,SECONDS);
 
     // Audio
-    private Voice voice = new Voice();
+    private Voice voice; // Initialized in runOpMode() to support safer 'sleep' method.
     private AndroidSoundPool androidSoundPool = new AndroidSoundPool();
 
     private Countdown countdown = new Countdown(70);
@@ -570,33 +94,27 @@ public class MobileLaunchVehicle extends LinearOpMode {
         if (gamepad1.a && gamepad1.b) {
             return abortLaunch();
         } else if (gamepad1.left_bumper && gamepad1.right_bumper && (oneX.getChange(gamepad1.x) == 1)) {
-            if(countdown.countdownState.state == 1) {
+            if(countdown.getCountdownState() == CountdownState.COUNTDOWN_COUNTING) {
                 voice.speak(decisionMaker + " reports, go for launch.", true);
-            } else if (countdown.countdownState.state == 0) {
-                countdown.countdownState = CountdownState.COUNTDOWN_COUNTING;
+            } else if (countdown.getCountdownState() == CountdownState.COUNTDOWN_HOLDING) {
+                countdown.resumeCountdown(); // Properly encapsulated
                 voice.speak(decisionMaker + " reports, go for launch. Resuming countdown.", true);
             }
             return 1;
         } else if (oneY.getChange(gamepad1.y) == 1) {
-            if(countdown.countdownState.state == 1) {
-                countdown.countdownState = CountdownState.COUNTDOWN_HOLDING;
+            if(countdown.getCountdownState() == CountdownState.COUNTDOWN_COUNTING) {
+                countdown.holdCountdown(); // Properly encapsulated
                 voice.speak(decisionSubject + " is no go. Hold countdown.", true);
                 countdown.setFlag(200);
             }
-        } else {
-
-            // TODO: FInd out why "SetFlag() GetFlag() are not working. GetFlag alweays returns true.
-//          if(countdown.getFlag()) {
-//              voice.speak("yo", true);
-//              countdown.setFlag(100000);
-//          }
         }
         return 0;
-    }
+    } 
 
     @Override
     public void runOpMode() {
         // Audio
+        voice = new Voice(this); // Initialize here to use OpMode's sleep method, which is safer (vs. Thread.sleep())
         // androidTextToSpeech.initialize();
         androidSoundPool.initialize(SoundPlayer.getInstance());
 
@@ -618,19 +136,19 @@ public class MobileLaunchVehicle extends LinearOpMode {
         double turnPower = 0;
 
         // Arm Servos
-        RobotArm robotArm = new RobotArm();
-
+        RobotArm robotArm = new RobotArm(hardwareMap, telemetry);
+        
         RobotServo servLaunchMaster = new RobotServo(
-                hardwareMap.servo.get("serv0"),
+                hardwareMap.servo.get("serv0"), telemetry,
                 0.20, 0.03, 0.0, 1.0, 0.00175, -0.03, (long)5000000);
         RobotServo servLaunch1 = new RobotServo(
-                hardwareMap.servo.get("serv1"),
+                hardwareMap.servo.get("serv1"), telemetry,
                 0.20, 0.03, 0.0, 1.0, 0.00175, -0.00, (long)5000000);
         RobotServo servLaunch2 = new RobotServo(
-                hardwareMap.servo.get("serv2"),
+                hardwareMap.servo.get("serv2"), telemetry,
                 0.20, 0.03, 0.0, 1.0, 0.00175, -0.03, (long)5000000);
         RobotServo servLaunch3 = new RobotServo(
-                hardwareMap.servo.get("serv3"),
+                hardwareMap.servo.get("serv3"), telemetry,
                 0.20, 0.03, 0.0, 1.0, 0.00175, 0.01, (long)5000000);
 
         // Should park on init, but make sure here.
@@ -736,14 +254,14 @@ public class MobileLaunchVehicle extends LinearOpMode {
                 // Speed:
                 // ********************************************************************
                 if (launchSequenceStep == -1) {
-                    if (oneDPadUp.getChange(gamepad1.dpad_up) == 1 && speed.speed < 5) {
+                    if (oneDPadUp.getChange(gamepad1.dpad_up) == 1 && speed.getSpeed() < 5) {
                         speed = speed.next();
-                        voice.speak(speed.description);
+                        voice.speak(speed.getDescription());
                     }
 
-                    if (oneDPadDown.getChange(gamepad1.dpad_down) == 1 && speed.speed > 1) {
+                    if (oneDPadDown.getChange(gamepad1.dpad_down) == 1 && speed.getSpeed() > 1) {
                         speed = speed.previous();
-                        voice.speak(speed.description);
+                        voice.speak(speed.getDescription());
                     }
                 }
 
@@ -769,10 +287,10 @@ public class MobileLaunchVehicle extends LinearOpMode {
                 //leftPower = basePower + turnPower;    This was used for arcade drive
                 //rightPower = basePower - turnPower;
 
-                rearLeft.setPower(leftPower * speed.powerFactor);
-                frontLeft.setPower(leftPower * speed.powerFactor);
-                rearRight.setPower(rightPower * speed.powerFactor);
-                frontRight.setPower(rightPower * speed.powerFactor);
+                rearLeft.setPower(leftPower * speed.getPowerFactor());
+                frontLeft.setPower(leftPower * speed.getPowerFactor());
+                rearRight.setPower(rightPower * speed.getPowerFactor());
+                frontRight.setPower(rightPower * speed.getPowerFactor());
 
                 // ********************************************************************
                 // Multi-axis Arm:
